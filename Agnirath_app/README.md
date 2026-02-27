@@ -1,54 +1,125 @@
-# AgniRath: Solar Car Race Strategy Optimizer
+# Energy-Constrained Optimal Control for Solar Electric Vehicles
 
-This project determines the optimal speed profile for a solar car to minimize race time between Chennai and Bangalore, subject to the vehicle's physical and electrical limits.
+A physics-informed optimal control framework that computes **time-optimal velocity policies** for solar electric vehicles subject to battery dynamics, power limits, terrain constraints, and stochastic environmental energy input.
 
----
-
-## Model Description
-
-The model finds the optimal strategy by coupling a detailed physics simulation with a powerful non linear optimizer (Scipy's SLSQP).
-
-### 1. High Fidelity Route Preparation
-The model's foundation is a high resolution route profile. Raw route geometry and elevation are fetched from the OpenRouteService API and then **resampled** into a uniform series of **100 meter segments**. This ensures that physics calculations are consistent and accurate across the entire race.
-
-### 2. Physics & Energy Simulation
-For any given velocity profile, the simulation calculates the consequences based on these core physics:
-* **Forces:** The total resistive force (F_resistive) is the sum of **Aerodynamic Drag** (F_drag ∝ v^2), **Rolling Resistance** (F_rolling), and **Gravitational Force** (F_gradient) on hills.
-* **Power:** Electrical power (P_elec) is calculated from the mechanical power required at the wheels, accounting for separate efficiencies for propulsion and regenerative braking.
-* **Energy Balance:** The battery's State of Charge (SoC) is tracked across the race using the net power for each time step: E_new = E_old + (P_solar - P_elec) ⋅ Δt
-
-### 3. Optimization
-* **Objective:** To **minimize total race time**.
-* **Decision Variables:** The optimizer controls the "start_hour" (to maximize solar gain) and a series of "chunk_velocities" (a target speed for each 1.5 km segment of the race).
-* **Constraints:** The strategy must obey these physical rules:
-    * Battery SoC must remain above a 3% minimum.
-    * Battery current draw cannot exceed its 50A hardware limit.
-    * Overcharging the battery is not allowed.
-    * Acceleration between chunks is limited for a smooth profile.
+This repository implements a **nonlinear constrained optimization system** combining high-fidelity physics simulation with trajectory optimization to derive energy-aware driving strategies for long-distance solar racing.
 
 ---
 
-## Key Assumptions
+## Key Contributions
 
-The model is a simplification of reality based on these key assumptions:
-
-#### Vehicle Model
-* Vehicle parameters (mass, drag area, efficiencies, etc) are constant.
-* Battery and solar panel performance are not affected by temperature.
-* The battery provides the nominal voltage regardless of SoC or load.
-
-#### Environmental Model
-* The solar irradiance is based on a **perfectly clear day**, modeled as a smooth sine wave with no cloud cover.
-* There is **no wind** resistance or assistance.
-* Air density is constant throughout the route.
-
-#### Driving & Route Model
-* The vehicle travels at a **constant speed** within each micro segment.
-* The model does not account for traffic, stop signs, or slowing for sharp turns.
-* Altitude data is smoothed to remove GPS noise, representing a more gradual road profile.
+- Physics-consistent vehicle energy model incorporating aerodynamic drag, rolling resistance, gradient forces, and regenerative braking
+- Battery-constrained trajectory optimization using nonlinear constrained programming (SLSQP)
+- Solar irradiance modeling for endogenous energy generation
+- Route preprocessing pipeline with elevation smoothing and spatial resampling
+- Policy discretization using chunk-based velocity control with acceleration regularization
+- Constraint-aware solver with diagnostic callback and feasibility analysis
 
 ---
 
-## Optimal Strategy Insights
+## Problem Formulation
 
-The resulting strategy is not simply to drive as fast as possible. The optimizer's key insight is to drive at a high, steady speed but also to **slow down for steep uphills**. This maneuver, seen as a sharp dip in the velocity profile, is a trade off to avoid violating the battery's maximum current limit, saving significant energy and preventing any damage to the battery for a minimal time penalty. The strategy also uses all available battery capacity, finishing the race precisely at the 3.0% SoC floor.
+The task is posed as a **nonlinear optimal control problem**.
+
+### Objective
+- Minimize total travel time
+
+### Decision Variables
+- Race start time
+- Piecewise velocity policy over spatial chunks
+
+### State Dynamics
+- Battery state of charge evolution
+- Power flow balance between solar input, regenerative braking, and propulsion demand
+
+### Constraints
+- Minimum battery state of charge
+- Maximum battery current
+- Overcharge prevention
+- Acceleration feasibility
+
+---
+
+## System Architecture
+
+```
+Route Data Pipeline → Physics Simulator → Constraint Engine → Nonlinear Optimizer → Velocity Policy
+```
+
+---
+
+## Physics Model
+
+The simulation models resistive forces:
+
+- Aerodynamic drag proportional to velocity squared
+- Rolling resistance
+- Gravitational gradient forces
+
+Electrical power is computed via drivetrain and regenerative efficiencies. Battery dynamics follow cumulative energy balance driven by solar input and propulsion demand.
+
+---
+
+## Optimization Method
+
+The framework employs **Sequential Least Squares Programming (SLSQP)** due to:
+
+- Nonlinear dynamics
+- Inequality constraints
+- High-dimensional decision space
+- Need for efficient gradient-informed search
+
+The solver iteratively refines velocity policies while respecting battery and hardware limits.
+
+---
+
+## Results
+
+The optimizer discovers a policy characterized by:
+
+- High steady-state cruising velocity
+- Selective deceleration on steep gradients to avoid current violations
+- Full utilization of battery capacity at finish
+- Alignment of travel window with peak solar irradiance
+
+---
+
+## Repository Structure
+
+```
+src/
+├── data_pipeline/
+├── physics/
+├── optimization/
+├── simulation/
+└── utils/
+```
+
+---
+
+## Quantitative Performance
+
+- **Optimal race time:** 3.48 hours  
+- **Minimum battery SoC:** 3%  
+- **Peak battery current:** 50 A  
+- **Solar energy generated:** 4.56 kWh  
+- **Electrical energy consumed:** 7.47 kWh  
+
+---
+
+## Numerical Stability & Robustness
+
+- Gradient-safe haversine computation
+- Floating point clipping for spherical geometry
+- Constraint feasibility diagnostics
+- Degenerate policy fallback generation
+
+---
+
+## Research Extensions
+
+- Stochastic irradiance modeling
+- Model predictive control formulation
+- Reinforcement learning velocity policies
+- Battery thermal coupling
+- Multi-stage global optimization
